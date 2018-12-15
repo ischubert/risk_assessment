@@ -41,4 +41,4 @@ Start your Jupyter notebook session
 
     $ jupyter notebook
 
-And choose `risk_assessment` as kernel
+and choose `risk_assessment` as kernel
