@@ -23,7 +23,7 @@ Activate the pipenv environment
 
     $ source .env
 
-And install it as Jupyter kernel
+and within the now activated environment shell, install it as Jupyter kernel
 
     $ ipython kernel install --user --name=risk_assessment
 
