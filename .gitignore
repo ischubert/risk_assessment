@@ -1,8 +1,4 @@
-data/sql/data_detailed.data
-download/*
-output/*
-data/raw/*
-data/temp/*
+# output/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

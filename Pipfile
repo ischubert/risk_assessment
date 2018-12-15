@@ -1,13 +1,15 @@
 [[source]]
-
 url = "https://pypi.python.org/simple"
 verify_ssl = true
 
-
 [packages]
-
 numpy = "*"
 scipy = "*"
 pandas = "*"
 seaborn = "*"
 selenium = "*"
+os = "*"
+urllib = "*"
+json = "*"
+sys = "*"
+matplotlib = "*"

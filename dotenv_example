@@ -1,0 +1,3 @@
+pipenv shell
+
+export ALPHAVANTAGEKEY=get_your_key_from_alphavantage_co

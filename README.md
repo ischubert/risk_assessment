@@ -1,16 +1,13 @@
-# Project Template
+# Risk Assessment of stock investments using historic data
 
-This is a project template. It contains a starting point for a typical report-like project.
-
-To use it press the plus on the left, then select "**Fork** this repository"
+This projects aims at estimating the risk of investments into a share by histogramming historic value data as a function of the duration of the investment.
 
 ## Folders
 
-- data: Folder for static data. In git. Maybe using git lfs.
-- download: Folder for downloadable files. Gitignored.
-- output: Folder for generated files. Gitignored.
-- output/figs: Folder for generated figures. Gitignored.
-- code: Folder for python files and modules.
+- data: Folder containing data, e.g. downloads of historical stock value data downloaded from the alpha vantage API
+- output: Folder for generated figures and other output
+- code: Folder containing the python modules
+- notebooks: Folder containing example Jupyter notebooks with data vizualizations
 
 ## Setup
 
@@ -19,10 +16,16 @@ Make sure you have https://github.com/kennethreitz/pipenv installed.
 Setup project
 
     $ make setup # setup virtualenv
-    $ cp dotenv.example .env # and edit if necessary
+    $ cp dotenv_example .env
+
+And save your alpha vantage key in `.env`.
+Activate the pipenv environment
+
     $ source .env
-    $ docker-compose up
-    $ make data # download data and ...
+
+And install it as Jupyter kernel
+
+    $ ipython kernel install --user --name=risk_assessment
 
 Install more dependencies via
 
@@ -30,15 +33,12 @@ Install more dependencies via
 
 # Run
 
-Start docker machine (like above) and then
+Activate pipenv environment using
 
     $ source .env
-    $ docker-compose up
 
-Then connect to Postgres in container with your favorite tool.
+Start your Jupyter notebook session
 
-Reminder: `docker-machine ip default` for the ip & user & port in dotenv file
+    $ jupyter notebook
 
-## And now?
-
-Look at the data!
+And choose `risk_assessment` as kernel
