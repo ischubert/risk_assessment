@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-import os, urllib.request, json, tqdm
+import os, urllib.request, json, tqdm, warnings
 
 
 alphavantage_data_dir = '../data/alphavantage_data/'
@@ -83,6 +83,10 @@ def download_data(symbol):
     with urllib.request.urlopen(api_call_url) as url:
         data = json.loads(url.read().decode())
         
+    if 'Error Message' in data.keys():
+        error_msg_string = data['Error Message']
+        raise(Exception('API request returned Error Message: ' + error_msg_string))
+        
     with open(alphavantage_data_dir + symbol + '.json', 'w') as outfile:
         json.dump(data, outfile)
     
@@ -107,7 +111,7 @@ def read_data(symbol):
     return data
 
 
-def unpack_to_daily_list(data):
+def unpack_to_daily_df(data):
     """
     From the json data loaded from the API or the json files, this function returns a list of the days
     and a list of the corresponging values
@@ -116,7 +120,8 @@ def unpack_to_daily_list(data):
         - data: Json data from the API or the json dump
     
     Output:
-        - [days,values]: two lists: daily pd.datetime timestamps in data and corresponding closing values
+        - values_df: pd.DataFrame with the day as index and a single column called 'value' containing the value.
+          This dataframe is resampled daily to the nearest value found in the dataset
     """
     
     days   = [pd.to_datetime(day) for day in data['Time Series (Daily)'].keys()]
@@ -126,69 +131,61 @@ def unpack_to_daily_list(data):
     days   = np.array(days[::-1])
     values = np.array(values[::-1])
     
-    return [days, values]
+#     throw out faulty zeros
+    days_clean   = []
+    values_clean = []
+    
+    for day, value in zip(days,values):
+        if value>0:
+            days_clean.append(day)
+            values_clean.append(value)
+    
+    
+    values_df = pd.DataFrame.from_records(
+        np.array([days_clean,values_clean]).T,
+        columns = ['day','value']
+    ).set_index('day').resample('1D').nearest()
+    
+    return values_df
 
 
 def get_pairwise_values(
-    unpacked_data,
+    values_df,
     time_delta
 ):
     """
     Returns a list of tuples of closing values of a stock at a specified distance in time
     
     Input:
-        - unpacked_data: [days, values]: Tuple of Lists containing the closing values of the
-                         stock at hand and the days corresponding days
+        - values_df: pd.DataFrame with the day as index and a single column called 'value' containing the value.
+                     This dataframe is resampled daily to the nearest value found in the dataset
         - time_delta: pd.Timedelta specifying the desired time diff
         
     Output:
-        - pairwise_values: List of tuples of the form (value at t_0, value at t_0 + time_delta),
-                           where t_0 is sampled in the distance of a day
+        - pairs_df: pd.DataFrame with the day as index, and the two columns
+                    'value_original' and 'value_after_time_delta'
     """
     
-    matching_tolerance = pd.to_timedelta(10, unit = 'day')
-    fail_count_treshold = 10
+    offset_values_df = values_df.set_index(values_df.index - time_delta).resample('1D').nearest()
     
-    [days,values] = unpacked_data
-    pairwise_values = []
+    pairs_df = values_df.merge(
+        offset_values_df,
+        how = 'left',
+        on = 'day',
+        suffixes = [
+            '_original',
+            '_after_time_delta'
+        ]
+    )
     
-    fail_count = 0
-    for day, value_0 in zip(days,values):
-        t_0_plus_time_delta_exists = (
-            np.min(
-                np.abs(
-                    days - (day + time_delta)
-                )
-            ) < matching_tolerance
-        )
-#         print(t_0_plus_time_delta_exists, day, day + time_delta)
-        if not t_0_plus_time_delta_exists:
-            fail_count += 1
-            
-        if t_0_plus_time_delta_exists:
-            pairwise_values.append(
-                [
-                    value_0,
-                    values[
-                        np.argmin(
-                            np.abs(
-                                days - (day + time_delta)
-                            )
-                        )
-                    ]
-                ]
-            )
-            
-        if fail_count > fail_count_treshold:
-            break
+#     drop all dates that could not be merged:
+    pairs_df = pairs_df.dropna(axis = 0)
     
-    pairwise_values = np.array(pairwise_values)
-    
-    return pairwise_values
+    return pairs_df
     
     
 def calculate_risk_histogram(
-    pairwise_values,
+    pairs_df,
     time_delta
 ):
     """
@@ -196,23 +193,27 @@ def calculate_risk_histogram(
     after a time_delta.
     
     Input:
-        - pairwise_values: numpy array of shape (num_samples,2) for pairwise values
-                           of a stock at 2 time instances separated by a constant time
-                           time_delta
+        - pairs_df: pd.DataFrame with the day as index, and the two columns
+                    'value_original' and 'value_after_time_delta'
         - time_delta: time by which value pairs are separated
     
     Output:
-        - effective_annual_growth: correspoding list of effective annual growths in between the pairs
+        - effective_annual_growth: correspoding np.array of effective annual growths in between the pairs
     """
     
-    relative_growth = (pairwise_values[:,1] - pairwise_values[:,0])/pairwise_values[:,0]
     num_years       = time_delta.total_seconds()/365/24/60/60
     
+    pairs_df['relative_growth'] = pairs_df.value_after_time_delta / pairs_df.value_original
+    
     effective_annual_growth = np.exp(
-        np.log(relative_growth) / num_years
+        np.log(pairs_df.relative_growth) / num_years
     ) - 1
     
-    return effective_annual_growth
+    pairs_df['effective_annual_growth'] = np.exp(
+        np.log(pairs_df.relative_growth) / num_years
+    ) - 1
+    
+    return np.array(pairs_df.effective_annual_growth)
 
 
 def calculate_risk_histogram_as_function_of_time(
@@ -232,14 +233,22 @@ def calculate_risk_histogram_as_function_of_time(
         - histograms: List of histograms for the corresponding time_deltas in time_deltas
     """
     
-    data          = get_historical_data([symbol])[0]
-    unpacked_data = unpack_to_daily_list(data)
+    data      = get_historical_data([symbol])[0]
+    values_df = unpack_to_daily_df(data)
+    
+#     check if requested time spans are covered
+    for time_delta in time_deltas:
+        if np.max(values_df.index) - np.min(values_df.index) < time_delta:
+            warnings.warn(
+                'Requested Time Delta is ' + str(time_delta) + ', but time span covered '\
+                'by data is only ' + str(np.max(values_df.index) - np.min(values_df.index))
+            )
     
     histograms = []
     for time_delta in tqdm.tqdm(time_deltas):
-        pairwise_values = get_pairwise_values(unpacked_data,time_delta)
+        pairs_df = get_pairwise_values(values_df,time_delta)
         histograms.append(
-            calculate_risk_histogram(pairwise_values,time_delta)
+            calculate_risk_histogram(pairs_df,time_delta)
         )
     
     return histograms
