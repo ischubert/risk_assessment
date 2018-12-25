@@ -2,6 +2,8 @@
 
 This projects aims at estimating the risk of investments into a share by histogramming historic value data as a function of the duration of the investment.
 
+![Alt text](thumbnail.png?raw=true "Histogram of return as function of duration")
+
 ## Folders
 
 - data: Folder containing data, e.g. downloads of historical stock value data downloaded from the alpha vantage API
