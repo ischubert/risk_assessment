@@ -21,7 +21,7 @@ def get_historical_data(
         - update: Bool whether the data should be updated if it exists already
         
     Output:
-        - datas: List of historical data for all ISINs specified in ISINs
+        - datas: List of historical data for all symbols specified in symbols
     """
     
     datas = []
